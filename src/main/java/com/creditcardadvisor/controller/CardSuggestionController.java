@@ -1,6 +1,8 @@
 package com.creditcardadvisor.controller;
 
 import com.creditcardadvisor.dto.StoreInfo;
+import com.creditcardadvisor.entity.UserProfile;
+import com.creditcardadvisor.repository.UserProfileRepository;
 import com.creditcardadvisor.service.GooglePlacesService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +27,9 @@ public class CardSuggestionController {
     @Autowired
     private GooglePlacesService googlePlacesService;
 
+    @Autowired
+    private UserProfileRepository userProfileRepository;
+
     @Value("${openai.api.key}")
     private String openAiKey;
 
@@ -32,7 +38,16 @@ private OpenAiService openAiService;
     @PostMapping("/get-card-suggestions")
     public ResponseEntity<?> getCardSuggestions(@RequestBody Map<String, Object> payload) {
         try {
-            List<String> userCards = (List<String>) payload.get("userCards");
+            //List<String> userCards = (List<String>) payload.get("userCards");
+            String email = (String) payload.get("email");
+
+            // fetch user cards from DB
+            List<String> userCards = userProfileRepository.findByEmail(email)
+                    .map(UserProfile::getUserCards)
+                    .orElse(new ArrayList<>());
+            if (userCards.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "No cards found for this user"));
+            }
             String store = (String) payload.get("store");
             String category = (String) payload.get("category");
             String currentQuarter = (String) payload.get("currentQuarter");
