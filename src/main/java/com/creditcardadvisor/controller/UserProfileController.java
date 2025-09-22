@@ -31,12 +31,18 @@ public class UserProfileController {
     public ResponseEntity<?> updateUser(@PathVariable String email, @RequestBody UserProfile updated) {
         return userProfileRepository.findByEmail(email)
                 .map(existing -> {
-                    existing.setName(updated.getName());
-                    existing.setUserCards(updated.getUserCards());
+                    existing.setName(updated.getName() != null ? updated.getName() : existing.getName());
+
+                    // ✅ Only update cards if request actually contains cards
+                    if (updated.getUserCards() != null && !updated.getUserCards().isEmpty()) {
+                        existing.setUserCards(updated.getUserCards());
+                    }
+
                     return ResponseEntity.ok(userProfileRepository.save(existing));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
+
 
     // Get profile by email
     @GetMapping("/{email}")
