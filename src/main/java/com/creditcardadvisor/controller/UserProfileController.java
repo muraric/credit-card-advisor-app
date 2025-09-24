@@ -17,6 +17,26 @@ public class UserProfileController {
     @Autowired
     private UserProfileRepository userProfileRepository;
 
+    @PostMapping("/login")
+    public ResponseEntity<UserProfile> login(@RequestBody Map<String, String> payload) {
+        String email = payload.get("email");
+
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        UserProfile profile = userProfileRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    UserProfile newProfile = new UserProfile();
+                    newProfile.setEmail(email);
+                    newProfile.setName(""); // optional: user can update later
+                    newProfile.setUserCards(new ArrayList<>());
+                    return userProfileRepository.save(newProfile);
+                });
+
+        return ResponseEntity.ok(profile);
+    }
+    
     // Create a profile
     @PostMapping
     public ResponseEntity<?> createUser(@RequestBody UserProfile userProfile) {
