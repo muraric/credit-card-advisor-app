@@ -1,10 +1,12 @@
 package com.creditcardadvisor.controller;
 
+import com.creditcardadvisor.dto.StoreInfo;
 import com.creditcardadvisor.service.GooglePlacesService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -31,5 +33,11 @@ public class GooglePlacesController {
                 "store", store,
                 "category", category
         ));
+    }
+    @GetMapping("/detect-stores")
+    public ResponseEntity<?> detectStores(@RequestParam double latitude,
+                                          @RequestParam double longitude) {
+        List<StoreInfo> stores = googlePlacesService.detectNearbyStores(latitude, longitude);
+        return ResponseEntity.ok(Map.of("stores", stores));
     }
 }

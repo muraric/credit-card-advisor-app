@@ -1,6 +1,6 @@
 package com.creditcardadvisor.repository;
 
-import com.creditcardadvisor.entity.UserProfile;
+import com.creditcardadvisor.model.UserProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

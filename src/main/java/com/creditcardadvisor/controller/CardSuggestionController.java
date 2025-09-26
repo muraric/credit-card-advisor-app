@@ -1,8 +1,10 @@
 package com.creditcardadvisor.controller;
 
 import com.creditcardadvisor.dto.StoreInfo;
-import com.creditcardadvisor.entity.UserProfile;
+import com.creditcardadvisor.model.SuggestionLog;
+import com.creditcardadvisor.model.UserProfile;
 import com.creditcardadvisor.repository.UserProfileRepository;
+import com.creditcardadvisor.repository.SuggestionLogRepository;
 import com.creditcardadvisor.service.GooglePlacesService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,8 +35,12 @@ public class CardSuggestionController {
     @Value("${openai.api.key}")
     private String openAiKey;
 
-@Autowired
-private OpenAiService openAiService;
+    @Autowired
+    private OpenAiService openAiService;
+
+    @Autowired
+    private SuggestionLogRepository suggestionLogRepository;
+
     @PostMapping("/get-card-suggestions")
     public ResponseEntity<?> getCardSuggestions(@RequestBody Map<String, Object> payload) {
         try {
@@ -107,6 +113,15 @@ private OpenAiService openAiService;
             ChatCompletionResult result = openAiService.createChatCompletion(request);
             String responseText = result.getChoices().get(0).getMessage().getContent();
 
+            // Save log
+            SuggestionLog log = new SuggestionLog();
+            log.setEmail(email);
+            log.setStore(store);
+            log.setCategory(category);
+            log.setRequestPayload(prompt);
+            log.setResponsePayload(responseText);
+            suggestionLogRepository.save(log);
+
             // ✅ Parse GPT JSON into a List before returning
             ObjectMapper mapper = new ObjectMapper();
             List<Map<String, Object>> parsedSuggestions = mapper.readValue(
@@ -128,6 +143,21 @@ private OpenAiService openAiService;
             return ResponseEntity.status(500).body(Map.of("error", "Error generating suggestions: " + e.getMessage()));
         }
     }
+
+    @PutMapping("/suggestions/{id}/review")
+    public ResponseEntity<?> reviewSuggestion(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> review) {
+        return suggestionLogRepository.findById(id)
+                .map(log -> {
+                    log.setIsCorrect((Boolean) review.get("isCorrect"));
+                    log.setReviewerNote((String) review.get("reviewerNote"));
+                    suggestionLogRepository.save(log);
+                    return ResponseEntity.ok(log);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
 
 
 }

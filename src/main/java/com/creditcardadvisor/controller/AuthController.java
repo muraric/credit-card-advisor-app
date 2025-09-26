@@ -1,6 +1,6 @@
 package com.creditcardadvisor.controller;
 
-import com.creditcardadvisor.entity.UserProfile;
+import com.creditcardadvisor.model.UserProfile;
 import com.creditcardadvisor.repository.UserProfileRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;

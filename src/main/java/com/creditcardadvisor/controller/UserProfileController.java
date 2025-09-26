@@ -1,6 +1,6 @@
 package com.creditcardadvisor.controller;
 
-import com.creditcardadvisor.entity.UserProfile;
+import com.creditcardadvisor.model.UserProfile;
 import com.creditcardadvisor.repository.UserProfileRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 import java.util.ArrayList;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/user")

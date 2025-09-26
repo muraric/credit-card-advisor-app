@@ -1,4 +1,4 @@
-package com.creditcardadvisor.entity;
+package com.creditcardadvisor.model;
 
 import jakarta.persistence.*;
 import java.util.List;

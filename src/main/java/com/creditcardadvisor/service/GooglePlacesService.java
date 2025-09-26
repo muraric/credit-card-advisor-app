@@ -19,6 +19,31 @@ public class GooglePlacesService {
     /**
      * Detect nearest store and category using latitude & longitude.
      */
+
+    public List<StoreInfo> detectNearbyStores(double latitude, double longitude) {
+        String placesUrl = String.format(
+                "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=%f,%f&radius=100&type=store&key=%s",
+                latitude, longitude, googleApiKey
+        );
+
+        Map<String, Object> response = restTemplate.getForObject(placesUrl, Map.class);
+        List<Map<String, Object>> results = (List<Map<String, Object>>) response.get("results");
+
+        if (results == null || results.isEmpty()) return List.of();
+
+        return results.stream()
+                .limit(5) // top 5
+                .map(r -> {
+                    String storeName = (String) r.get("name");
+                    String category = getCategoryForStore(storeName); // reuse your logic
+                    return new StoreInfo(storeName, category);
+                })
+                .toList();
+    }
+
+    /**
+     * Detect nearest store and category using latitude & longitude.
+     */
     public StoreInfo detectNearestStore(double latitude, double longitude) {
         String placesUrl = String.format(
                 "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=%f,%f&radius=100&type=store&key=%s",
@@ -42,7 +67,6 @@ public class GooglePlacesService {
 
         return new StoreInfo(storeName, category);
     }
-
     /**
      * Fallback category mapping by store name keywords.
      */
