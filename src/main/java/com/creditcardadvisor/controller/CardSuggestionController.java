@@ -1,10 +1,9 @@
 package com.creditcardadvisor.controller;
 
 import com.creditcardadvisor.dto.StoreInfo;
-import com.creditcardadvisor.model.SuggestionLog;
 import com.creditcardadvisor.model.UserProfile;
-import com.creditcardadvisor.repository.UserProfileRepository;
 import com.creditcardadvisor.repository.SuggestionLogRepository;
+import com.creditcardadvisor.repository.UserProfileRepository;
 import com.creditcardadvisor.service.GooglePlacesService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +39,9 @@ public class CardSuggestionController {
 
     @Autowired
     private SuggestionLogRepository suggestionLogRepository;
+
+    @Autowired
+    private com.creditcardadvisor.config.PromptLoader promptLoader;
 
     @PostMapping("/get-card-suggestions")
     public ResponseEntity<?> getCardSuggestions(@RequestBody Map<String, Object> payload) {
@@ -80,7 +82,7 @@ public class CardSuggestionController {
 
             // GPT prompt
             // GPT prompt with explicit reward rules
-            String prompt = "You are a credit card rewards assistant.\n"
+            /*String prompt = "You are a credit card rewards assistant.\n"
                     + "The user has these cards: " + String.join(", ", userCards) + ".\n"
                     + "Store: " + store + ".\n"
                     + "Category: " + category + ".\n"
@@ -101,8 +103,15 @@ public class CardSuggestionController {
                     + "3. If no category-specific bonus applies, use the highest flat-rate card.\n\n"
                     + "Output ONLY a valid JSON array in this exact format:\n"
                     + "[{\"card_name\": \"string\", \"expected_reward\": \"string\", \"reasoning\": \"string\"}]";
+*/
 
+            // Load base prompt from file
+            String basePrompt = promptLoader.getCardSuggestionPrompt();
 
+            // Build final prompt dynamically with user context
+            String prompt = basePrompt + "\n\n" +
+                    "The user has these cards: " + String.join(", ", userCards) + ".\n" +
+                    "Store: " + store + ".\n";
             System.out.println(prompt);
             ChatMessage message = new ChatMessage("user", prompt);
             ChatCompletionRequest request = ChatCompletionRequest.builder()
@@ -114,25 +123,36 @@ public class CardSuggestionController {
             String responseText = result.getChoices().get(0).getMessage().getContent();
 
             // Save log
-            SuggestionLog log = new SuggestionLog();
+            /*SuggestionLog log = new SuggestionLog();
             log.setEmail(email);
             log.setStore(store);
             log.setCategory(category);
             log.setRequestPayload(prompt);
             log.setResponsePayload(responseText);
-            suggestionLogRepository.save(log);
+            suggestionLogRepository.save(log);*/
 
             // ✅ Parse GPT JSON into a List before returning
             ObjectMapper mapper = new ObjectMapper();
-            List<Map<String, Object>> parsedSuggestions = mapper.readValue(
+            /*List<Map<String, Object>> parsedSuggestions = mapper.readValue(
                     responseText,
                     new TypeReference<List<Map<String, Object>>>() {}
+            );*/
+
+            Map<String, Object> parsedResponse = mapper.readValue(
+                    responseText,
+                    new TypeReference<Map<String, Object>>() {}
             );
+
+            String categoryFromAi = (String) parsedResponse.get("category");
+            String quarterFromAi = (String) parsedResponse.get("currentQuarter");
+            List<Map<String, Object>> parsedSuggestions =
+                    (List<Map<String, Object>>) parsedResponse.get("suggestions");
 
             // Wrap into a proper response object
             Map<String, Object> responseMap = Map.of(
                     "store", store,
-                    "category", category,
+                    "category", categoryFromAi,
+                    "currentQuarter", quarterFromAi,
                     "suggestions", parsedSuggestions
             );
 
@@ -157,7 +177,4 @@ public class CardSuggestionController {
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
-
-
-
 }
