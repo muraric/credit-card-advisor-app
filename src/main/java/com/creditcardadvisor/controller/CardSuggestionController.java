@@ -5,20 +5,18 @@ import com.creditcardadvisor.model.UserProfile;
 import com.creditcardadvisor.repository.SuggestionLogRepository;
 import com.creditcardadvisor.repository.UserProfileRepository;
 import com.creditcardadvisor.service.GooglePlacesService;
+import com.creditcardadvisor.config.PromptLoader;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.theokanning.openai.OpenAiService;
-import com.theokanning.openai.completion.chat.ChatCompletionRequest;
-import com.theokanning.openai.completion.chat.ChatCompletionResult;
-import com.theokanning.openai.completion.chat.ChatMessage;
+import okhttp3.*;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api")
@@ -31,39 +29,38 @@ public class CardSuggestionController {
     @Autowired
     private UserProfileRepository userProfileRepository;
 
-    @Value("${openai.api.key}")
-    private String openAiKey;
-
-    @Autowired
-    private OpenAiService openAiService;
-
     @Autowired
     private SuggestionLogRepository suggestionLogRepository;
 
     @Autowired
-    private com.creditcardadvisor.config.PromptLoader promptLoader;
+    private PromptLoader promptLoader;
+
+    @Value("${openai.api.key}")
+    private String openAiKey;
+
+    private final OkHttpClient httpClient = new OkHttpClient();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @PostMapping("/get-card-suggestions")
-    public ResponseEntity<?> getCardSuggestions(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<?> getCardSuggestions(@org.springframework.web.bind.annotation.RequestBody Map<String, Object> payload) {
         try {
-            //List<String> userCards = (List<String>) payload.get("userCards");
             String email = (String) payload.get("email");
 
-            // fetch user cards from DB
+            // Fetch user cards from DB
             List<String> userCards = userProfileRepository.findByEmail(email)
                     .map(UserProfile::getUserCards)
                     .orElse(new ArrayList<>());
             if (userCards.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "No cards found for this user"));
             }
+
             String store = (String) payload.get("store");
             String category = (String) payload.get("category");
             String currentQuarter = (String) payload.get("currentQuarter");
 
-            // Handle auto-detect (if no store provided)
+            // Handle auto-detect via Google Places
             if ((store == null || store.isEmpty()) &&
                     payload.containsKey("latitude") && payload.containsKey("longitude")) {
-
                 double latitude = Double.parseDouble(payload.get("latitude").toString());
                 double longitude = Double.parseDouble(payload.get("longitude").toString());
 
@@ -73,82 +70,96 @@ public class CardSuggestionController {
                     category = detected.getCategory();
                 }
             }
+
             if (store != null && category == null) {
                 category = googlePlacesService.getCategoryForStore(store);
             }
+
             if (store == null || store.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Store name or location required"));
             }
 
-            // GPT prompt
-            // GPT prompt with explicit reward rules
-            /*String prompt = "You are a credit card rewards assistant.\n"
-                    + "The user has these cards: " + String.join(", ", userCards) + ".\n"
-                    + "Store: " + store + ".\n"
-                    + "Category: " + category + ".\n"
-                    + "Current quarter: " + currentQuarter + ".\n\n"
-                    + "Apply the following strict reward rules when calculating the best card:\n"
-                    + "- Amex Blue Cash Preferred: 6% groceries, 3% gas/streaming/transit, 1% other.\n"
-                    + "- Chase Freedom Flex: 5% on rotating quarterly categories (if category matches), 1% other.\n"
-                    + "- Chase Freedom Unlimited: 1.5% everywhere.\n"
-                    + "- Chase Freedom (legacy): same rules as Freedom Flex.\n"
-                    + "- Citi Double Cash: 2% everywhere.\n"
-                    + "- Capital One Venture: 2% everywhere (miles).\n"
-                    + "- Bank of America Customized Cash Rewards: 3% in chosen category, 2% groceries, 1% other.\n"
-                    + "- Amazon Prime Visa: 5% Amazon/Whole Foods, 2% gas/restaurants/drugstores, 1% other.\n"
-                    + "- Costco Anywhere Visa: 4% gas, 3% restaurants/travel, 2% Costco, 1% other.\n\n"
-                    + "Rules for decision:\n"
-                    + "1. Always prioritize the highest reward percentage among the user's cards.\n"
-                    + "2. If two cards tie, prefer the one with the broader earning category.\n"
-                    + "3. If no category-specific bonus applies, use the highest flat-rate card.\n\n"
-                    + "Output ONLY a valid JSON array in this exact format:\n"
-                    + "[{\"card_name\": \"string\", \"expected_reward\": \"string\", \"reasoning\": \"string\"}]";
-*/
-
-            // Load base prompt from file
+            // Load base system prompt
             String basePrompt = promptLoader.getCardSuggestionPrompt();
 
-            // Build final prompt dynamically with user context
-            String prompt = basePrompt + "\n\n" +
-                    "The user has these cards: " + String.join(", ", userCards) + ".\n" +
-                    "Store: " + store + ".\n";
-            System.out.println(prompt);
-            ChatMessage message = new ChatMessage("user", prompt);
-            ChatCompletionRequest request = ChatCompletionRequest.builder()
-                    .model("gpt-3.5-turbo")
-                    .messages(List.of(message))
-                    .build();
+            // Build dynamic user context
+            String userPrompt = "The user has these cards: " + String.join(", ", userCards) + ".\n" +
+                    "Store: " + store + ".\n" +
+//                    (category != null ? "Category: " + category + ".\n" : "") +
+                    (currentQuarter != null ? "Current quarter: " + currentQuarter + ".\n" : "");
 
-            ChatCompletionResult result = openAiService.createChatCompletion(request);
-            String responseText = result.getChoices().get(0).getMessage().getContent();
+            // Build request payload for Responses API
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", "gpt-4.1"); // or gpt-4o
+            requestBody.put("tools", List.of(Map.of("type", "web_search_preview"))); // enable web search
+            requestBody.put("input", List.of(
+                    Map.of("role", "system", "content", basePrompt),
+                    Map.of("role", "user", "content", userPrompt)
+            ));
 
-            // Save log
-            /*SuggestionLog log = new SuggestionLog();
-            log.setEmail(email);
-            log.setStore(store);
-            log.setCategory(category);
-            log.setRequestPayload(prompt);
-            log.setResponsePayload(responseText);
-            suggestionLogRepository.save(log);*/
-
-            // ✅ Parse GPT JSON into a List before returning
-            ObjectMapper mapper = new ObjectMapper();
-            /*List<Map<String, Object>> parsedSuggestions = mapper.readValue(
-                    responseText,
-                    new TypeReference<List<Map<String, Object>>>() {}
-            );*/
-
-            Map<String, Object> parsedResponse = mapper.readValue(
-                    responseText,
-                    new TypeReference<Map<String, Object>>() {}
+            // ✅ Explicitly use okhttp3.RequestBody
+            okhttp3.RequestBody body = okhttp3.RequestBody.create(
+                    okhttp3.MediaType.parse("application/json"),
+                    mapper.writeValueAsString(requestBody)
             );
 
+            Request request = new Request.Builder()
+                    .url("https://api.openai.com/v1/responses")
+                    .header("Authorization", "Bearer " + openAiKey)
+                    .header("Content-Type", "application/json")
+                    .post(body)
+                    .build();
+
+            String responseText;
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    return ResponseEntity.status(response.code())
+                            .body(Map.of("error", "OpenAI API call failed: " + response.message()));
+                }
+                String bodyString = response.body().string();
+
+                // Parse full API response into a map
+                Map<String, Object> bodyMap = mapper.readValue(bodyString, new TypeReference<Map<String, Object>>() {});
+
+                // The "output" array contains assistant messages
+                List<Map<String, Object>> outputs = (List<Map<String, Object>>) bodyMap.get("output");
+                if (outputs == null || outputs.isEmpty()) {
+                    return ResponseEntity.status(500).body(Map.of("error", "No output from model"));
+                }
+
+                // ✅ Scan all outputs for first "output_text"
+                responseText = null;
+                for (Map<String, Object> outputItem : outputs) {
+                    List<Map<String, Object>> contentList = (List<Map<String, Object>>) outputItem.get("content");
+                    if (contentList != null) {
+                        for (Map<String, Object> contentItem : contentList) {
+                            if ("output_text".equals(contentItem.get("type"))) {
+                                responseText = (String) contentItem.get("text");
+                                break;
+                            }
+                        }
+                    }
+                    if (responseText != null) break;
+                }
+
+                if (responseText == null) {
+                    return ResponseEntity.status(500).body(Map.of("error", "No output_text from model"));
+                }
+            }
+
+            // ✅ Cleanup: strip markdown fences if present
+            responseText = responseText.trim();
+            if (responseText.startsWith("```")) {
+                responseText = responseText.replaceAll("```(json)?", "").trim();
+            }
+
+            // Parse GPT JSON into Map
+            Map<String, Object> parsedResponse = mapper.readValue(responseText, new TypeReference<Map<String, Object>>() {});
             String categoryFromAi = (String) parsedResponse.get("category");
             String quarterFromAi = (String) parsedResponse.get("currentQuarter");
-            List<Map<String, Object>> parsedSuggestions =
-                    (List<Map<String, Object>>) parsedResponse.get("suggestions");
+            List<Map<String, Object>> parsedSuggestions = (List<Map<String, Object>>) parsedResponse.get("suggestions");
 
-            // Wrap into a proper response object
+            // Build response
             Map<String, Object> responseMap = Map.of(
                     "store", store,
                     "category", categoryFromAi,
@@ -158,6 +169,9 @@ public class CardSuggestionController {
 
             return ResponseEntity.ok(responseMap);
 
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "OpenAI API I/O error: " + e.getMessage()));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Error generating suggestions: " + e.getMessage()));
@@ -167,7 +181,7 @@ public class CardSuggestionController {
     @PutMapping("/suggestions/{id}/review")
     public ResponseEntity<?> reviewSuggestion(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> review) {
+            @org.springframework.web.bind.annotation.RequestBody Map<String, Object> review) {
         return suggestionLogRepository.findById(id)
                 .map(log -> {
                     log.setIsCorrect((Boolean) review.get("isCorrect"));
