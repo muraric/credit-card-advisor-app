@@ -2,7 +2,6 @@ package com.creditcardadvisor.controller;
 
 import com.creditcardadvisor.dto.StoreInfo;
 import com.creditcardadvisor.model.UserProfile;
-import com.creditcardadvisor.repository.SuggestionLogRepository;
 import com.creditcardadvisor.repository.UserProfileRepository;
 import com.creditcardadvisor.service.GooglePlacesService;
 import com.creditcardadvisor.config.PromptLoader;
@@ -28,9 +27,6 @@ public class CardSuggestionController {
 
     @Autowired
     private UserProfileRepository userProfileRepository;
-
-    @Autowired
-    private SuggestionLogRepository suggestionLogRepository;
 
     @Autowired
     private PromptLoader promptLoader;
@@ -152,7 +148,7 @@ public class CardSuggestionController {
             if (responseText.startsWith("```")) {
                 responseText = responseText.replaceAll("```(json)?", "").trim();
             }
-
+            System.out.println(responseText);
             // Parse GPT JSON into Map
             Map<String, Object> parsedResponse = mapper.readValue(responseText, new TypeReference<Map<String, Object>>() {});
             String categoryFromAi = (String) parsedResponse.get("category");
@@ -176,19 +172,5 @@ public class CardSuggestionController {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Error generating suggestions: " + e.getMessage()));
         }
-    }
-
-    @PutMapping("/suggestions/{id}/review")
-    public ResponseEntity<?> reviewSuggestion(
-            @PathVariable Long id,
-            @org.springframework.web.bind.annotation.RequestBody Map<String, Object> review) {
-        return suggestionLogRepository.findById(id)
-                .map(log -> {
-                    log.setIsCorrect((Boolean) review.get("isCorrect"));
-                    log.setReviewerNote((String) review.get("reviewerNote"));
-                    suggestionLogRepository.save(log);
-                    return ResponseEntity.ok(log);
-                })
-                .orElse(ResponseEntity.notFound().build());
     }
 }

@@ -13,13 +13,12 @@ import java.util.*;
 @RequestMapping("/api/auth")
 @CrossOrigin
 public class AuthController {
-
     @Autowired
     private UserProfileRepository userProfileRepository;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    @PostMapping("/register")
+    @PostMapping("/signup")
     public ResponseEntity<?> register(@RequestBody Map<String, String> payload) {
         String email = payload.get("email");
         String password = payload.get("password");
@@ -29,7 +28,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "User already exists"));
         }
 
-        UserProfile user = new UserProfile();
+        UserProfile  user = new UserProfile();
         user.setEmail(email);
         user.setName(name);
         user.setPasswordHash(passwordEncoder.encode(password));
