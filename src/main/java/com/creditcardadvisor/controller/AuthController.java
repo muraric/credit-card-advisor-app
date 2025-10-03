@@ -19,7 +19,7 @@ public class AuthController {
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    @PostMapping("/register")
+    @PostMapping("/signup")
     public ResponseEntity<?> register(@RequestBody Map<String, String> payload) {
         String email = payload.get("email");
         String password = payload.get("password");

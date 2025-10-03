@@ -57,7 +57,6 @@ public class UserProfileController {
                     if (updated.getUserCards() != null && !updated.getUserCards().isEmpty()) {
                         existing.setUserCards(updated.getUserCards());
                     }
-
                     return ResponseEntity.ok(userProfileRepository.save(existing));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
