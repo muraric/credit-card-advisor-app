@@ -151,30 +151,37 @@ public class UserProfileController {
                     // update user name if provided
                     if (request.getName() != null) {
                         user.setName(request.getName());
-                        userProfileRepository.save(user);
                     }
-                    List<String> cardList = new ArrayList<>();
-                    // process cards
+
+                    // ✅ Clear old cards before replacing
+                    user.setUserCards(new ArrayList<>());
+
+                    List<String> newCardList = new ArrayList<>();
+
+                    // process incoming cards
                     for (Map<String, String> cardMap : request.getUserCards()) {
                         String cardName = cardMap.get("card_name");
                         if (cardName == null || cardName.isBlank()) continue;
-                        try {
 
+                        try {
                             boolean exists = creditCardRepository.existsByCardName(cardName);
                             if (!exists) {
                                 Map<?, ?> rewardDetails = rewardDetailService.getRewardDetails(cardName);
                                 String rewardJson = objectMapper.writeValueAsString(rewardDetails);
+
                                 CreditCard creditCard = new CreditCard();
                                 creditCard.setCardName(cardName);
                                 creditCard.setRewardDetails(rewardJson);
                                 creditCardRepository.save(creditCard);
                             }
-                            cardList.add(cardName);
+                            newCardList.add(cardName);
                         } catch (Exception e) {
-                            System.out.println("❌ Failed to serialize reward details for card {}" +  cardName);
+                            System.out.println("❌ Failed to serialize reward details for card: " + cardName);
                         }
                     }
-                    user.setUserCards(cardList);
+
+                    // ✅ Replace with only the new list
+                    user.setUserCards(newCardList);
                     userProfileRepository.save(user);
 
                     // build response (same as GET)
@@ -207,6 +214,7 @@ public class UserProfileController {
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
+
 
     // Get profile by email
     @GetMapping("/{email}")
