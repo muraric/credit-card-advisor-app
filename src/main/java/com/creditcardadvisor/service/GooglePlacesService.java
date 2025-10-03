@@ -22,7 +22,7 @@ public class GooglePlacesService {
 
     public List<StoreInfo> detectNearbyStores(double latitude, double longitude) {
         String placesUrl = String.format(
-                "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=%f,%f&radius=100&type=store&key=%s",
+                "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=%f,%f&radius=100&key=%s",
                 latitude, longitude, googleApiKey
         );
 

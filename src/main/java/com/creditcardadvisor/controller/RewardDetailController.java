@@ -29,6 +29,6 @@ public class RewardDetailController {
     public Map<?, ?> getCardRewards(@org.springframework.web.bind.annotation.RequestBody Map<String, Object> payload) {
         String cardName = (String) payload.get("card_name");
         //return ResponseEntity.ok(responseMap);
-        return rewardDetailService.getCardRewards(cardName);
+        return rewardDetailService.getRewardDetails(cardName);
     }
 }

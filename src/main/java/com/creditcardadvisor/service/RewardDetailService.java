@@ -30,7 +30,7 @@ public class RewardDetailService {
     private final ObjectMapper mapper = new ObjectMapper();
 
 
-    public Map<?, ?> getCardRewards(String cardName) {
+    public Map<?, ?> getRewardDetails(String cardName) {
         try {
             //String cardName = (String) payload.get("card_name");
 

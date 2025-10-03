@@ -13,7 +13,6 @@ import java.util.*;
 @RequestMapping("/api/auth")
 @CrossOrigin
 public class AuthController {
-
     @Autowired
     private UserProfileRepository userProfileRepository;
 
@@ -29,7 +28,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "User already exists"));
         }
 
-        UserProfile user = new UserProfile();
+        UserProfile  user = new UserProfile();
         user.setEmail(email);
         user.setName(name);
         user.setPasswordHash(passwordEncoder.encode(password));
