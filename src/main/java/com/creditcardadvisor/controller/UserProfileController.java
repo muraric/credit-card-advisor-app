@@ -36,7 +36,7 @@ public class UserProfileController {
 
         return ResponseEntity.ok(profile);
     }
-    
+
     // Create a profile
     @PostMapping
     public ResponseEntity<?> createUser(@RequestBody UserProfile userProfile) {

@@ -1,10 +1,6 @@
 package com.creditcardadvisor.controller;
 
-import com.creditcardadvisor.dto.StoreInfo;
-import com.creditcardadvisor.model.UserProfile;
-import com.creditcardadvisor.repository.SuggestionLogRepository;
 import com.creditcardadvisor.repository.UserProfileRepository;
-import com.creditcardadvisor.service.GooglePlacesService;
 import com.creditcardadvisor.config.PromptLoader;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,16 +17,10 @@ import java.util.*;
 @RestController
 @RequestMapping("/api")
 @CrossOrigin
-public class CardSuggestionController {
-
-    @Autowired
-    private GooglePlacesService googlePlacesService;
+public class RewardDetailController {
 
     @Autowired
     private UserProfileRepository userProfileRepository;
-
-    @Autowired
-    private SuggestionLogRepository suggestionLogRepository;
 
     @Autowired
     private PromptLoader promptLoader;
@@ -41,52 +31,16 @@ public class CardSuggestionController {
     private final OkHttpClient httpClient = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    @PostMapping("/get-card-suggestions")
-    public ResponseEntity<?> getCardSuggestions(@org.springframework.web.bind.annotation.RequestBody Map<String, Object> payload) {
+    @PostMapping("/get-card-rewards")
+    public ResponseEntity<?> getCardRewards(@org.springframework.web.bind.annotation.RequestBody Map<String, Object> payload) {
         try {
-            String email = (String) payload.get("email");
-
-            // Fetch user cards from DB
-            List<String> userCards = userProfileRepository.findByEmail(email)
-                    .map(UserProfile::getUserCards)
-                    .orElse(new ArrayList<>());
-            if (userCards.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "No cards found for this user"));
-            }
-
-            String store = (String) payload.get("store");
-            String category = (String) payload.get("category");
-            String currentQuarter = (String) payload.get("currentQuarter");
-
-            // Handle auto-detect via Google Places
-            if ((store == null || store.isEmpty()) &&
-                    payload.containsKey("latitude") && payload.containsKey("longitude")) {
-                double latitude = Double.parseDouble(payload.get("latitude").toString());
-                double longitude = Double.parseDouble(payload.get("longitude").toString());
-
-                StoreInfo detected = googlePlacesService.detectNearestStore(latitude, longitude);
-                if (detected != null) {
-                    store = detected.getName();
-                    category = detected.getCategory();
-                }
-            }
-
-            if (store != null && category == null) {
-                category = googlePlacesService.getCategoryForStore(store);
-            }
-
-            if (store == null || store.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Store name or location required"));
-            }
+            String cardName = (String) payload.get("card_name");
 
             // Load base system prompt
-            String basePrompt = promptLoader.getCardSuggestionPrompt();
+            String basePrompt = promptLoader.getCardRewardPrompt();
 
             // Build dynamic user context
-            String userPrompt = "The user has these cards: " + String.join(", ", userCards) + ".\n" +
-                    "Store: " + store + ".\n" +
-//                    (category != null ? "Category: " + category + ".\n" : "") +
-                    (currentQuarter != null ? "Current quarter: " + currentQuarter + ".\n" : "");
+            String userPrompt = "The user has these cards: " + String.join(", ", cardName);
 
             // Build request payload for Responses API
             Map<String, Object> requestBody = new HashMap<>();
@@ -152,19 +106,15 @@ public class CardSuggestionController {
             if (responseText.startsWith("```")) {
                 responseText = responseText.replaceAll("```(json)?", "").trim();
             }
+
             System.out.println(responseText);
             // Parse GPT JSON into Map
             Map<String, Object> parsedResponse = mapper.readValue(responseText, new TypeReference<Map<String, Object>>() {});
-            String categoryFromAi = (String) parsedResponse.get("category");
-            String quarterFromAi = (String) parsedResponse.get("currentQuarter");
-            List<Map<String, Object>> parsedSuggestions = (List<Map<String, Object>>) parsedResponse.get("suggestions");
+            Map<String, Object> parsedRewards = (Map<String, Object>) parsedResponse.get("cardReward");
 
             // Build response
             Map<String, Object> responseMap = Map.of(
-                    "store", store,
-                    "category", categoryFromAi,
-                    "currentQuarter", quarterFromAi,
-                    "suggestions", parsedSuggestions
+                    "cardReward", parsedRewards
             );
 
             return ResponseEntity.ok(responseMap);
@@ -176,19 +126,5 @@ public class CardSuggestionController {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Error generating suggestions: " + e.getMessage()));
         }
-    }
-
-    @PutMapping("/suggestions/{id}/review")
-    public ResponseEntity<?> reviewSuggestion(
-            @PathVariable Long id,
-            @org.springframework.web.bind.annotation.RequestBody Map<String, Object> review) {
-        return suggestionLogRepository.findById(id)
-                .map(log -> {
-                    log.setIsCorrect((Boolean) review.get("isCorrect"));
-                    log.setReviewerNote((String) review.get("reviewerNote"));
-                    suggestionLogRepository.save(log);
-                    return ResponseEntity.ok(log);
-                })
-                .orElse(ResponseEntity.notFound().build());
     }
 }
