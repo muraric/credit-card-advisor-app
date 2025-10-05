@@ -1,5 +1,6 @@
 package com.creditcardadvisor.controller;
 
+import com.creditcardadvisor.dto.NearbySearchResponse;
 import com.creditcardadvisor.dto.StoreInfo;
 import com.creditcardadvisor.service.GooglePlacesService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,13 @@ public class GooglePlacesController {
     public ResponseEntity<?> detectStores(@RequestParam double latitude,
                                           @RequestParam double longitude) {
         List<StoreInfo> stores = googlePlacesService.detectNearbyStores(latitude, longitude);
+        return ResponseEntity.ok(Map.of("stores", stores));
+    }
+
+    @GetMapping("/detect-stores-v1")
+    public ResponseEntity<?> detectNearestStorev2(@RequestParam double latitude,
+                                                  @RequestParam double longitude) {
+        NearbySearchResponse stores = googlePlacesService.detectNearestStorev2(latitude, longitude);
         return ResponseEntity.ok(Map.of("stores", stores));
     }
 }

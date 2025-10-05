@@ -1,10 +1,17 @@
 package com.creditcardadvisor.service;
 
+import com.creditcardadvisor.dto.NearbySearchRequest;
+import com.creditcardadvisor.dto.NearbySearchResponse;
 import com.creditcardadvisor.dto.StoreInfo;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -15,6 +22,7 @@ public class GooglePlacesService {
     private String googleApiKey;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private static final String PLACES_API_URL = "https://places.googleapis.com/v1/places:searchNearby";
 
     /**
      * Detect nearest store and category using latitude & longitude.
@@ -112,4 +120,52 @@ public class GooglePlacesService {
             return "general";
         }
     }
+
+    public NearbySearchResponse detectNearestStorev2(double latitude, double longitude) {
+        // 1. Setup Request Headers
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Goog-Api-Key", googleApiKey);
+        // This is a REQUIRED header for the Places API (New)
+        headers.set("X-Goog-FieldMask", "places.displayName,places.formattedAddress,places.location,places.primaryType");
+
+        // 2. Create the Request Entity (Headers + Body)
+        String[] includeTypes = {"restaurant", "cafe", "bakery", "bar", "night_club", "clothing_store", "supermarket", "book_store", "shopping_mall", "atm", "accounting", "gas_station", "car_dealer", "car_repair", "parking", "car_wash", "hospital", "dentist", "doctor", "pharmacy", "physiotherapist", "lodging", "rv_park", "university", "school", "library", "primary_school", "hair_care", "laundry", "travel_agency", "park", "zoo", "stadium", "gym", "museum"};
+        NearbySearchRequest.Center center = NearbySearchRequest.Center.builder()
+                .latitude(latitude) // Set the first field
+                .longitude(longitude) // Set the second field on the SAME builder
+                .build(); // Build the final object
+        NearbySearchRequest.Circle circle =NearbySearchRequest.Circle.builder()
+                .radius(500)
+                .center(center)
+                .build();
+        NearbySearchRequest.LocationRestriction locationRestriction = NearbySearchRequest.LocationRestriction.builder()
+                .circle(circle)
+                .build();
+        NearbySearchRequest requestBody = NearbySearchRequest.builder()
+                .maxResultCount(10)
+                .includedTypes(includeTypes)
+                .locationRestriction(locationRestriction)
+                .build();
+
+        HttpEntity<NearbySearchRequest> entity = new HttpEntity<>(requestBody, headers);
+
+        try {
+            // 3. Send the POST Request using RestTemplate
+            ResponseEntity<NearbySearchResponse> response = restTemplate.postForEntity(
+                    PLACES_API_URL,
+                    entity,
+                    NearbySearchResponse.class
+            );
+
+            // 4. Return the response body
+            return response.getBody();
+
+        } catch (Exception e) {
+            // Log the error and throw a custom exception or return an empty response
+            System.err.println("Error calling Google Places API: " + e.getMessage());
+            throw new RuntimeException("Nearby search failed", e);
+        }
+    }
+
 }
